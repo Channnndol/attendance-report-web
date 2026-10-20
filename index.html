@@ -83,7 +83,7 @@
 <details><summary>빠진 인원 추가</summary><form id="add-form"><div class="two"><div><label for="add-org">소속</label><select id="add-org"><option value="partner">협력사</option><option value="manager">세보관리자</option></select></div><div><label for="add-group">파트</label><select id="add-group"></select></div></div><label for="add-name">이름</label><input id="add-name" required maxlength="30" placeholder="이름 입력"><label class="check"><input id="add-new" type="checkbox">오늘 신규 입사자입니다</label><button type="submit" class="secondary">오늘 명단에 추가</button><p class="hint">오늘만 추가됩니다. 이후에도 포함하려면 아래 기본 명단에도 등록하세요.</p></form><div id="extra-list"></div></details>
 <details id="settings"><summary>기본 명단 · 현장 설정</summary><p class="hint">파트 : 이름 이름 형식입니다. 변경 후 저장하세요. 퇴사자는 이름을 선택한 뒤 사유를 ‘퇴사’로 바꾸고 ‘퇴사 처리’를 누르면 오늘 보고에는 퇴사자로 남고 다음 보고부터 기본 명단에서 제외됩니다.</p><label for="site">현장명</label><input id="site"><label for="company">협력사명</label><input id="company"><label for="manager">세보관리자 기본 명단</label><textarea id="manager" rows="12"></textarea><label for="partner">협력사 기본 명단</label><textarea id="partner" rows="9"></textarea><p class="hint">2026년 10월 20일 기준: 세보관리자 22명 · 협력사 16명입니다.</p><button id="save" class="secondary">기본 설정 저장</button><p class="hint">기본 설정만 이 브라우저에 저장합니다. 매일의 결근 선택과 완성 글은 저장하지 않습니다. 페이지를 다시 열면 전원 출근으로 시작합니다.</p></details>
 <div class="confirm-bar"><span id="selection-count">결근 0명</span><button id="generate">확인 · 글 만들기</button></div>
-<section id="result" hidden><div class="section-head"><h2>2. 완성 글 확인</h2><span class="badge">직접 수정 가능</span></div><p id="stale" class="notice" hidden>명단이나 날짜가 변경되었습니다. ‘확인 · 글 만들기’를 다시 눌러주세요.</p><label for="output" class="hint">수정 내용까지 그대로 복사·공유됩니다.</label><textarea id="output" rows="24"></textarea><div class="actions"><button id="copy">텍스트 복사</button><button id="share" class="kakao">공유하기</button></div><p id="share-help" class="hint">휴대폰 공유 메뉴에서 카카오톡을 선택하세요. 카카오톡이 보이지 않으면 복사 후 붙여넣으세요.</p><div id="status" role="status" aria-live="polite"></div></section>
+<section id="result" hidden><div class="section-head"><h2>2. 완성 글 확인</h2><span class="badge">직접 수정 가능</span></div><p id="stale" class="notice" hidden>명단이나 날짜가 변경되었습니다. ‘확인 · 글 만들기’를 다시 눌러주세요.</p><label for="output" class="hint">수정 내용까지 그대로 복사·공유됩니다.</label><textarea id="output" rows="24"></textarea><div id="share-feedback" class="notice" hidden><p id="share-message" role="status" aria-live="polite"></p><button id="share-copy" type="button" class="secondary">복사해서 카카오톡에 붙여넣기</button><p class="hint">앱에서 공유창을 지원하지 않으면 복사를 이용하세요. 공유 메뉴는 Chrome에서 다시 시도할 수 있습니다.</p></div><div class="actions"><button id="copy">텍스트 복사</button><button id="share" class="kakao">공유하기</button></div><p id="share-help" class="hint">휴대폰 공유 메뉴에서 카카오톡을 선택하세요. 카카오톡이 보이지 않으면 복사 후 붙여넣으세요.</p><div id="status" role="status" aria-live="polite"></div></section>
 <details><summary>아이폰 · 안드로이드 사용 안내</summary><p class="hint">이 주소를 아이폰 Safari 또는 안드로이드 Chrome·삼성 인터넷에서 열어 사용하세요. 카카오톡 안에서 열었을 때 복사나 공유가 안 되면 휴대폰 기본 브라우저에서 다시 열어주세요.</p><p class="hint">자주 사용하면 브라우저 메뉴의 홈 화면 추가 기능으로 바로가기를 만들 수 있습니다. 기본 명단은 브라우저별로 저장되므로 같은 브라우저를 계속 사용하세요.</p></details>
 <footer>선택 → 글 확인 → 복사 또는 공유<br>공유할 앱과 대화방은 직접 선택합니다.<small>Made by Chan</small></footer>
 </main><script>(function(root){
@@ -169,6 +169,7 @@ const api={defaults,parseRoster,removePerson,addPerson,summarize,generate};if(ty
 const $=id=>document.getElementById(id);
 const storageKey='attendance-settings-v2';
 let config={...Roster.defaults},base,states={},extras=[],stale=true,settingsDirty=false;
+let sharePending=false,shareFeedbackVersion=0;
 function notice(text){$('notice').textContent=text;$('notice').hidden=!text;}
 function readBase(candidate){return {manager:Roster.parseRoster(candidate.manager,'manager'),partner:Roster.parseRoster(candidate.partner,'partner')};}
 try{
@@ -182,7 +183,7 @@ const localDate=()=>{const d=new Date();return `${d.getFullYear()}-${String(d.ge
 $('date').value=localDate();let previousDate=$('date').value;
 const people=()=>[...base.manager.people,...base.partner.people,...extras];
 const element=(tag,cls,text)=>{const el=document.createElement(tag);if(cls)el.className=cls;if(text!==undefined)el.textContent=text;return el;};
-function invalidate(){stale=true;$('stale').hidden=$('result').hidden;$('copy').disabled=true;$('share').disabled=true;$('status').textContent='';}
+function invalidate(){stale=true;shareFeedbackVersion++;$('stale').hidden=$('result').hidden;$('copy').disabled=true;$('share').disabled=true;$('share-feedback').hidden=true;$('status').textContent='';}
 function saveConfig(message){
  try{localStorage.setItem(storageKey,JSON.stringify(config));notice(message);return true;}
  catch(e){notice('현재 화면에는 반영했지만 브라우저에 저장하지 못했습니다. 페이지를 닫기 전에 기본 명단을 확인해 주세요.');return false;}
@@ -259,16 +260,47 @@ function selectText(){$('output').focus();$('output').select();$('output').setSe
 const selectButton=element('button','secondary','글 전체 선택');selectButton.type='button';selectButton.id='select-text';selectButton.hidden=true;
 $('status').before(selectButton);
 selectButton.onclick=()=>{if(!ready())return;selectText();$('status').textContent='글을 선택했습니다. 선택한 글을 길게 눌러 복사하세요. PC에서는 Ctrl+C를 누르세요.';};
-$('copy').onclick=async()=>{
+async function copyReport(){
  if(!ready())return;
  try{if(!navigator.clipboard?.writeText)throw new Error('unsupported');await navigator.clipboard.writeText($('output').value);$('status').textContent='복사했습니다. 카카오톡 대화방에 붙여넣으세요.';}
  catch(e){selectText();let copied=false;try{copied=document.execCommand('copy');}catch(e){}selectButton.hidden=copied;$('status').textContent=copied?'복사했습니다. 카카오톡 대화방에 붙여넣으세요.':'자동 복사를 사용할 수 없습니다. 글 전체 선택 버튼을 누르고 글을 길게 눌러 복사하세요. 카카오톡 안에서 열었다면 기본 브라우저에서 다시 열어보세요.';}
+}
+$('copy').onclick=copyReport;
+$('share-copy').onclick=async()=>{
+ if(!ready())return;
+ shareFeedback('글을 복사하고 있습니다. 복사 안내를 확인한 뒤 카카오톡 대화방에 붙여넣으세요.');
+ await copyReport();
+ shareFeedback($('status').textContent);
 };
+function shareFeedback(message){
+ shareFeedbackVersion++;
+ $('share-feedback').hidden=false;$('share-message').textContent=message;
+}
 $('share').onclick=async()=>{
  if(!ready())return;
- if(!navigator.share){$('status').textContent='이 환경에서는 공유 메뉴를 열 수 없습니다. 텍스트 복사를 이용하세요.';return;}
- try{const payload={text:$('output').value};if(navigator.canShare&&!navigator.canShare(payload)){$('status').textContent='이 브라우저에서 텍스트 공유를 지원하지 않습니다. 텍스트 복사를 이용하세요.';return;}await navigator.share(payload);$('status').textContent='공유 메뉴에 글을 전달했습니다. 전송 여부는 선택한 앱에서 확인하세요.';}
- catch(e){$('status').textContent=e.name==='AbortError'?'공유를 취소했거나 공유할 앱이 없습니다.':'공유 메뉴를 열지 못했습니다. 텍스트 복사를 이용하세요.';}
+ if(sharePending){shareFeedback('이전 공유 요청의 응답을 기다리고 있습니다. 공유창이 보이지 않으면 아래 버튼으로 글을 복사해 카카오톡에 붙여넣으세요.');return;}
+ if(typeof navigator.share!=='function'){
+  shareFeedback('이 앱에서는 텍스트 공유창을 열 수 없습니다. 아래 버튼으로 글을 복사한 뒤 카카오톡 대화방에 붙여넣으세요.');
+  $('share-feedback').scrollIntoView({block:'nearest'});
+  return;
+ }
+ shareFeedback('휴대폰 공유 메뉴를 요청했습니다. 공유창이 보이지 않으면 아래 복사 버튼을 이용하세요.');
+ const version=shareFeedbackVersion;
+ const current=()=>version===shareFeedbackVersion&&!stale;
+ sharePending=true;
+ const timeout=setTimeout(()=>{
+  if(current())$('share-message').textContent='공유 응답을 기다리고 있습니다. 공유창이 열려 있으면 앱을 선택하세요. 아무 창도 보이지 않으면 아래 버튼으로 글을 복사하세요.';
+ },4000);
+ try{
+  // Call from the tap handler, before any await. A text-only request does not
+  // need a canShare preflight; the actual share result determines support.
+  const request=navigator.share({text:$('output').value});
+  $('share-feedback').scrollIntoView({block:'nearest'});
+  await request;
+  if(current())$('share-message').textContent='공유 요청이 완료되었습니다. 실제 전송 여부는 선택한 앱에서 확인하세요.';
+ }catch(e){
+  if(current())$('share-message').textContent=e?.name==='AbortError'?'공유가 취소되었거나 공유할 앱을 찾지 못했습니다. 필요하면 아래 복사 버튼을 이용하세요.':'이 앱에서 공유창을 열지 못했습니다. 아래 버튼으로 글을 복사해 카카오톡에 붙여넣거나 Chrome에서 이 페이지를 열어주세요.';
+ }finally{clearTimeout(timeout);sharePending=false;}
 };
 if(!navigator.share)$('share-help').textContent='현재 환경은 공유 메뉴를 지원하지 않습니다. 복사를 이용하세요. 휴대폰 공유 기능은 지원 브라우저의 HTTPS 주소에서 사용할 수 있습니다.';
 render();updateGroups();invalidate();
